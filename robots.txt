@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://hera-the-goddess.vercel.app/sitemap.xml
