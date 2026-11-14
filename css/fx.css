@@ -1,0 +1,190 @@
+/* Hera The Goddess: motion and 3D layer.
+   Loaded after styles.css. Every effect here is switched off for visitors who ask
+   for reduced motion (see the block at the bottom). The behaviour lives in js/fx.js. */
+:root{--spring:cubic-bezier(.34,1.56,.64,1)}
+
+/* ================= intro: the emblem disc zooms open ================= */
+.intro{position:fixed;inset:0;z-index:200;display:grid;place-items:center;align-content:center;gap:34px;background:radial-gradient(60% 50% at 50% 45%,#1c150b,var(--ink) 72%);transition:opacity .5s ease}
+.no-intro .intro{display:none}
+.intro-zoom{transition:transform .95s cubic-bezier(.75,0,.25,1)}
+.intro-disc{position:relative;display:grid;place-items:center;width:min(210px,52vw);height:min(210px,52vw);border-radius:50%;background:radial-gradient(closest-side,#1d160c,#0a0908);box-shadow:0 0 0 1px var(--line),0 0 90px rgba(226,190,120,.2);animation:discIn .9s var(--spring) both}
+.intro-disc img{height:calc(min(210px,52vw) * .74);width:auto;filter:drop-shadow(0 0 18px rgba(226,190,120,.4))}
+.intro-ring{position:absolute;inset:-16px;border-radius:50%;border:1px solid transparent;border-top-color:var(--gold);border-right-color:rgba(226,190,120,.35);animation:spin 1.3s linear infinite}
+.intro-word{display:flex;gap:.55em;padding-left:.55em;font:300 clamp(26px,4.6vw,40px)/1 var(--display);color:var(--gold);perspective:400px}
+.intro-word span{display:inline-block;transform-origin:50% 100%;animation:letterIn .8s var(--ease) both}
+.intro-word span:nth-child(1){animation-delay:.3s}.intro-word span:nth-child(2){animation-delay:.38s}
+.intro-word span:nth-child(3){animation-delay:.46s}.intro-word span:nth-child(4){animation-delay:.54s}
+.intro.out .intro-zoom{transform:scale(14)}
+.intro.out .intro-word{opacity:0;transition:opacity .25s}
+.intro.gone{opacity:0;pointer-events:none}
+body.locked{overflow:hidden}
+@keyframes discIn{from{transform:scale(.4) rotate(-25deg);opacity:0}to{transform:none;opacity:1}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes letterIn{from{opacity:0;transform:translateY(.45em) rotateX(-85deg)}to{opacity:1;transform:none}}
+
+/* ================= hero ================= */
+.hero{padding:0;overflow:visible;background:var(--ink)}
+.stick{position:relative;overflow:hidden;padding:clamp(48px,7vw,92px) 0 clamp(80px,9vw,120px);background:
+  radial-gradient(55% 70% at 80% 42%,rgba(168,129,47,.26),rgba(168,129,47,0) 70%),
+  radial-gradient(40% 50% at 6% 100%,rgba(168,129,47,.16),rgba(168,129,47,0) 70%),
+  var(--ink)}
+.hero-emblem::before{display:none}
+
+/* the emblem is a small 3D scene: glow, halo ring, a soft echo behind, the drawing, and two orbit rings */
+.hero-emblem{position:relative;justify-self:center;perspective:1300px;will-change:transform}
+.scene{position:relative;transform-style:preserve-3d;will-change:transform}
+.hero-emblem .scene img.emb{position:relative;display:block;height:min(560px,62vh);min-height:360px;width:auto;transform:translateZ(46px);filter:drop-shadow(0 0 26px rgba(226,190,120,.25))}
+.hero-emblem .scene img.echo{position:absolute;left:50%;top:50%;height:100%;min-height:0;width:auto;transform:translate(-50%,-50%) translateZ(-110px) scale(1.16);opacity:.16;filter:blur(2px)}
+.halo{position:absolute;left:50%;top:32%;width:130%;aspect-ratio:1;border-radius:50%;transform:translate(-50%,-50%) translateZ(-160px);background:radial-gradient(closest-side,rgba(168,129,47,.42),rgba(168,129,47,0) 72%);pointer-events:none}
+.ring{position:absolute;left:50%;border-radius:50%;pointer-events:none}
+.ring i{position:absolute;left:50%;top:-4px;width:8px;height:8px;margin-left:-4px;border-radius:50%;background:var(--gold-2);box-shadow:0 0 12px 3px rgba(243,215,154,.7)}
+.ring-a{top:30%;width:112%;aspect-ratio:1;border:1px dashed rgba(226,190,120,.3);animation:ringA 60s linear infinite}
+.ring-b{top:58%;width:158%;aspect-ratio:1;border:1px solid rgba(226,190,120,.42);animation:ringB 16s linear infinite}
+.ring-c{top:16%;width:96%;aspect-ratio:1;border:1px solid rgba(226,190,120,.22);animation:ringC 22s linear infinite}
+.ring-c i{width:5px;height:5px;margin-left:-2.5px;top:-2.5px}
+@keyframes ringA{from{transform:translate(-50%,-50%) translateZ(-70px) rotate(0)}to{transform:translate(-50%,-50%) translateZ(-70px) rotate(360deg)}}
+@keyframes ringB{from{transform:translate(-50%,-50%) rotateX(77deg) rotateZ(0)}to{transform:translate(-50%,-50%) rotateX(77deg) rotateZ(360deg)}}
+@keyframes ringC{from{transform:translate(-50%,-50%) rotateX(72deg) rotateY(-16deg) rotateZ(360deg)}to{transform:translate(-50%,-50%) rotateX(72deg) rotateY(-16deg) rotateZ(0)}}
+
+/* entrance once the intro opens (class "ready" on <html>) */
+.hera{perspective:700px}
+.hera>span{display:inline-block;transform-origin:50% 100%}
+.ready .hera>span{animation:letterIn 1.1s var(--ease) backwards}
+.ready .hera>span:nth-child(1){animation-delay:.05s}.ready .hera>span:nth-child(2){animation-delay:.13s}
+.ready .hera>span:nth-child(3){animation-delay:.21s}.ready .hera>span:nth-child(4){animation-delay:.29s}
+.ready .hero h1 .script{animation:wipe 1.4s var(--ease) .55s backwards}
+.ready .hero-copy>.eyebrow{animation:up .9s var(--ease) backwards}
+.ready .hero-copy>.hero-tag{animation:up .9s var(--ease) .7s backwards}
+.ready .hero-copy>.lede{animation:up .9s var(--ease) .8s backwards}
+.ready .hero-copy>.cta{animation:up .9s var(--ease) .9s backwards}
+.ready .hero-copy>.next-night{animation:up .9s var(--ease) 1s backwards}
+.ready .hero-copy>.facts{animation:up .9s var(--ease) 1.1s backwards}
+.ready .hero-rule{animation:grow 1.4s var(--ease) .3s backwards;transform-origin:50% 50%}
+.ready .hero-emblem{animation:emblemIn 1.6s var(--ease) .1s backwards}
+@keyframes wipe{from{clip-path:inset(0 100% 0 0);opacity:.2}to{clip-path:inset(0 -10% 0 0);opacity:1}}
+@keyframes up{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:none}}
+@keyframes grow{from{transform:scaleY(0);opacity:0}}
+@keyframes emblemIn{from{opacity:0;transform:translateY(40px) scale(.84)}to{opacity:1;transform:none}}
+
+/* score panel and pinned tags: only used by the scroll scene */
+.score,.tags{display:none}
+.score h2{margin-top:14px;font:300 clamp(34px,3.7vw,56px)/1.06 var(--display);letter-spacing:.05em;text-transform:uppercase;text-wrap:balance}
+.score h2 .dim{display:block;margin-top:6px;color:rgba(241,232,216,.36)}
+.score p:not(.eyebrow){margin-top:18px;max-width:36ch;color:var(--muted);font-size:16.5px}
+.score .btn{margin-top:28px}
+.tag{position:absolute;left:0;top:0;display:flex;align-items:center;opacity:0;will-change:transform,opacity}
+.tag.l{flex-direction:row-reverse}
+.tag b{flex:none;width:10px;height:10px;border-radius:50%;background:var(--gold);animation:ping 2.2s ease-out infinite}
+.tag i{flex:none;width:46px;height:1px;background:linear-gradient(90deg,var(--gold),rgba(226,190,120,.25))}
+.tag.l i{background:linear-gradient(270deg,var(--gold),rgba(226,190,120,.25))}
+.tag span{display:grid;gap:4px;padding:10px 16px;border:1px solid var(--line);background:rgba(10,9,8,.8);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);font:500 10.5px/1.2 var(--ui);letter-spacing:.24em;text-transform:uppercase;color:var(--gold);white-space:nowrap}
+.tag em{font:italic 400 19px/1.1 var(--display);letter-spacing:.02em;text-transform:none;color:var(--cream)}
+@keyframes ping{0%{box-shadow:0 0 0 0 rgba(226,190,120,.6)}70%{box-shadow:0 0 0 12px rgba(226,190,120,0)}100%{box-shadow:0 0 0 0 rgba(226,190,120,0)}}
+
+/* ---------- the scroll scene (big screens) ----------
+   The hero stays pinned while you scroll: the words lift away, the goddess turns
+   and moves in, the story panel appears and the tags pin out from the drawing. */
+.staged .hero{height:250vh}
+.staged .stick{position:sticky;top:var(--nav);height:calc(100vh - var(--nav));min-height:560px;padding:0;display:grid;align-items:center}
+.staged .hero-copy{will-change:transform,opacity}
+.staged .hera{font-size:clamp(70px,min(12vw,17vh),160px);margin-top:min(18px,1.6vh)}
+.staged .hero h1 .script{font-size:clamp(40px,min(6vw,8.6vh),80px)}
+.staged .hero-tag{margin-top:min(24px,2.4vh)}
+.staged .hero-copy .cta{margin-top:min(32px,3.2vh)}
+.staged .next-night{margin-top:min(26px,2.6vh)}
+.staged .facts{margin-top:min(38px,3.6vh)}
+.staged .hero-rule{min-height:0;height:min(520px,66vh)}
+.staged .hero-emblem .scene img.emb{height:min(540px,64vh);min-height:0}
+.staged .score{display:block;position:absolute;z-index:4;left:max(16px,calc((100vw - var(--wrap)) / 2));top:50%;width:min(430px,34vw);opacity:0;visibility:hidden;will-change:transform,opacity}
+.staged .tags{display:block;position:absolute;inset:0;z-index:5;pointer-events:none}
+.staged .scroll-cue{bottom:22px}
+
+/* ================= gold ticker (speeds up and leans when you scroll) ================= */
+.ticker{position:relative;z-index:3;overflow:hidden;padding:20px 0;border-top:1px solid var(--line);background:linear-gradient(90deg,var(--ink),#13100a 50%,var(--ink))}
+.track{display:flex;align-items:center;width:max-content;will-change:transform}
+.track span{padding:0 .5em;font:300 clamp(30px,4.2vw,58px)/1.05 var(--display);letter-spacing:.08em;text-transform:uppercase;white-space:nowrap;color:var(--gold)}
+.track span.o{color:transparent;-webkit-text-stroke:1px rgba(226,190,120,.8)}
+.track b{flex:none;font-size:clamp(14px,1.6vw,22px);color:var(--gold-deep)}
+
+/* ================= headings: letters flip up in 3D ================= */
+.h2.split{perspective:900px}
+.h2 .wd{display:inline-block;white-space:nowrap}
+.h2 .c{display:inline-block;transform-origin:50% 100%;transition:transform 1s var(--ease),opacity .7s var(--ease);transition-delay:calc(var(--i) * 26ms)}
+.js .h2.split:not(.in) .c{opacity:0;transform:translateY(.5em) rotateX(-90deg)}
+
+/* ================= reveal: blocks tip up into place ================= */
+.js .reveal{opacity:0;transform:perspective(1100px) translateY(38px) rotateX(13deg);transform-origin:50% 0}
+.js .reveal.in{opacity:1;transform:none}
+.js .sec-head::after{transform:scaleX(0);transform-origin:left;transition:transform 1.2s var(--ease) .4s}
+.js .sec-head.in::after{transform:none}
+
+/* ================= 3D tilt cards with a gold sheen ================= */
+.tilt{position:relative;transform-style:preserve-3d}
+.tilt::after{content:"";position:absolute;inset:0;z-index:3;pointer-events:none;background:radial-gradient(circle at var(--gx,50%) var(--gy,50%),rgba(243,215,154,.2),rgba(243,215,154,0) 55%);opacity:0;transition:opacity .45s}
+.tilt.tilting::after{opacity:1}
+.night>div,.feature-body,.pillar{transform-style:preserve-3d}
+.night-date,.night h3,.night .night-title,.night .btn,.avail,.pillar svg,.pillar h3,.feature h4,.feature .price,.feature .tag,.poster img,.past-cap,.map-card img,.map-place{transition:transform .6s var(--ease)}
+.night.tilting .night-date{transform:translateZ(54px)}
+.night.tilting .avail{transform:translateZ(22px)}
+.night.tilting h3,.night.tilting .night-title{transform:translateZ(36px)}
+.night.tilting .btn{transform:translateZ(44px)}
+.pillar.tilting svg{transform:translateZ(44px) scale(1.12)}
+.pillar.tilting h3{transform:translateZ(26px)}
+.feature.tilting h4{transform:translateZ(28px)}
+.feature.tilting .tag{transform:translateZ(20px)}
+.feature.tilting .price{transform:translateZ(46px)}
+.poster.tilting img{transform:translateZ(34px)}
+.past-card.tilting .past-cap{transform:translateZ(26px)}
+.map-card.tilting img{transform:translateZ(60px)}
+.map-card.tilting .map-place{transform:translateZ(34px)}
+.past-card,.card{position:relative}
+.map-card:not(.has-map) img{animation:float 6s ease-in-out infinite}
+@keyframes float{50%{translate:0 -10px}}
+
+/* ================= recent nights: a strip that drifts as you scroll ================= */
+.past-view{margin-inline:calc(50% - 50vw);padding:16px max(16px,calc((100vw - var(--wrap)) / 2)) 28px;overflow:hidden}
+.past-grid.strip{display:flex;gap:22px;width:max-content;will-change:transform}
+.strip .past-card{flex:none;width:clamp(190px,21vw,240px);rotate:var(--r,0deg);transition:rotate .6s var(--ease),border-color .3s,box-shadow .4s,opacity .8s var(--ease)}
+.strip .past-card:hover{rotate:0deg}
+
+/* ================= menu: panels flip in, dishes rise one after another ================= */
+[role="tabpanel"].swap{animation:panelIn .7s var(--ease)}
+@keyframes panelIn{from{opacity:0;transform:perspective(1100px) translateY(30px) rotateX(9deg)}to{opacity:1;transform:none}}
+.js .msec .item,.js .msec .feature{opacity:0;transform:perspective(900px) translateY(26px) rotateX(12deg);transform-origin:50% 0}
+.msec.in .item,.msec.in .feature{opacity:1;transform:none;transition:opacity .7s var(--ease),transform .9s var(--ease);transition-delay:calc(min(var(--i,0), 14) * 38ms)}
+
+/* reading progress through the menu, under the header */
+.mprog{position:absolute;left:0;right:0;bottom:-1px;height:2px;background:linear-gradient(90deg,var(--gold-deep),var(--gold-2));transform:scaleX(0);transform-origin:left;opacity:0;transition:opacity .3s;pointer-events:none}
+.mprog.on{opacity:1}
+
+/* ================= cursor and magnetic buttons (mouse only) ================= */
+.cur{position:fixed;left:0;top:0;z-index:300;width:0;height:0;pointer-events:none;transition:opacity .2s}
+.cur::before{content:"";position:absolute;left:-17px;top:-17px;width:34px;height:34px;border:1px solid var(--gold);border-radius:50%;transition:transform .4s var(--spring),background .25s,border-color .25s}
+.cur::after{content:"";position:absolute;left:-2.5px;top:-2.5px;width:5px;height:5px;border-radius:50%;background:var(--gold);transition:opacity .2s}
+.cur span{position:absolute;left:0;top:0;transform:translate(-50%,-50%) scale(.6);opacity:0;font:500 10px/1 var(--ui);letter-spacing:.22em;text-transform:uppercase;color:#1a130a;white-space:nowrap;transition:opacity .2s,transform .4s var(--spring)}
+.cur.hot::before{transform:scale(1.6);background:rgba(226,190,120,.1)}
+.cur.label::before{transform:scale(2.4);background:var(--gold)}
+.cur.label::after{opacity:0}
+.cur.label span{opacity:1;transform:translate(-50%,-50%) scale(1)}
+.cur.down::before{transform:scale(.75)}
+.cur.hide{opacity:0}
+.btn{transition:background .25s,color .25s,border-color .25s,transform .25s var(--ease),box-shadow .25s,translate .35s var(--ease)}
+
+/* ================= phones and tablets ================= */
+@media (max-width:900px){
+  .hero-emblem .scene img.emb{height:230px;min-height:0}
+  .ring-b{width:150%}
+}
+
+/* ================= reduced motion: everything still and readable ================= */
+@media (prefers-reduced-motion:reduce){
+  .intro,.ticker,.cur{display:none!important}
+  .js .reveal,.js .msec .item,.js .msec .feature,.js .h2.split:not(.in) .c{opacity:1;transform:none}
+  .js .sec-head::after{transform:none}
+  .ring{animation:none}
+}
+@media print{
+  .intro,.ticker,.cur,.mprog,.tags,.score{display:none!important}
+  .staged .hero{height:auto}
+  .staged .stick{position:static;height:auto}
+}

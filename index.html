@@ -33,7 +33,14 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,400&family=Jost:wght@300;400;500&family=Pinyon+Script&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/styles.css">
-<script>document.documentElement.classList.add("js")</script>
+<link rel="stylesheet" href="css/fx.css">
+<script>
+(function(){var r=document.documentElement,m=window.matchMedia;r.classList.add("js");
+var calm=m&&m("(prefers-reduced-motion: reduce)").matches;
+if(!calm&&m&&m("(min-width: 901px) and (min-height: 640px)").matches)r.classList.add("staged");
+var seen=false;try{seen=sessionStorage.getItem("hera-intro")==="1";}catch(e){}
+if(calm||seen||location.hash)r.classList.add("no-intro","ready");})();
+</script>
 
 <script type="application/ld+json">
 {
@@ -62,6 +69,16 @@
 </head>
 <body>
 
+<div class="intro" id="intro" aria-hidden="true">
+  <div class="intro-zoom">
+    <div class="intro-disc">
+      <span class="intro-ring"></span>
+      <img src="assets/img/logo-emblem-320.png" alt="" width="320" height="517">
+    </div>
+  </div>
+  <p class="intro-word"><span>H</span><span>E</span><span>R</span><span>A</span></p>
+</div>
+
 <a class="skip" href="#main">Skip to content</a>
 
 <header class="site" id="site-header">
@@ -84,17 +101,19 @@
       <a class="btn btn-nav" href="#reserve">Reserve</a>
     </nav>
   </div>
+  <span class="mprog" id="mprog" aria-hidden="true"></span>
 </header>
 
 <main id="main">
 
 <section class="hero" id="top" aria-labelledby="hero-title">
+  <div class="stick" id="stick">
   <div class="hero-media" id="hero-media" aria-hidden="true"></div>
   <canvas id="embers" aria-hidden="true"></canvas>
   <div class="wrap hero-grid">
-    <div class="hero-copy">
+    <div class="hero-copy" id="hero-copy">
       <p class="eyebrow">Resto &middot; Bar &middot; Salhiyeh, Saida</p>
-      <h1 id="hero-title"><span class="hera">Hera</span><span class="script">The Goddess</span></h1>
+      <h1 id="hero-title" aria-label="Hera The Goddess"><span class="hera" aria-hidden="true"><span>H</span><span>e</span><span>r</span><span>a</span></span><span class="script" aria-hidden="true">The Goddess</span></h1>
       <p class="hero-tag">Where dinner becomes the night.</p>
       <p class="lede">Live-grilled fokhara, signature cocktails and a new lineup of DJs every weekend. Book your table or your party in a minute.</p>
       <div class="cta">
@@ -108,13 +127,37 @@
         <li><small>Age</small><span>18+ only</span></li>
       </ul>
     </div>
-    <div class="hero-rule" aria-hidden="true"></div>
-    <div class="hero-emblem">
-      <img src="assets/img/logo-emblem-470.png" srcset="assets/img/logo-emblem-320.png 320w, assets/img/logo-emblem-470.png 470w" sizes="(max-width:900px) 150px, 346px" width="470" height="760" fetchpriority="high" alt="Line drawing of the goddess Hera wearing a crown, the Hera logo">
+    <div class="hero-rule" id="hero-rule" aria-hidden="true"></div>
+    <div class="hero-emblem" id="emblem">
+      <div class="scene" id="scene">
+        <span class="halo" aria-hidden="true"></span>
+        <span class="ring ring-a" aria-hidden="true"></span>
+        <span class="ring ring-b" aria-hidden="true"><i></i></span>
+        <img class="echo" src="assets/img/logo-emblem-320.png" alt="" width="320" height="517" aria-hidden="true">
+        <img class="emb" id="emb" src="assets/img/logo-emblem-470.png" srcset="assets/img/logo-emblem-320.png 320w, assets/img/logo-emblem-470.png 470w" sizes="(max-width:900px) 150px, 346px" width="470" height="760" fetchpriority="high" alt="Line drawing of the goddess Hera wearing a crown, the Hera logo">
+        <span class="ring ring-c" aria-hidden="true"><i></i></span>
+      </div>
     </div>
   </div>
-  <a class="scroll-cue" href="#about" aria-label="Scroll to the About section"><span aria-hidden="true"></span></a>
+
+  <div class="score" id="score">
+    <p class="eyebrow">A night at Hera</p>
+    <h2>Dinner starts with fire.<span class="dim">The night ends with the DJ.</span></h2>
+    <p>Grill your own fokhara at the table, raise a cocktail named for the goddess, and stay for the weekend lineup.</p>
+    <a class="btn btn-gold" href="#reserve">Reserve a table</a>
+  </div>
+  <div class="tags" id="tags" aria-hidden="true">
+    <div class="tag l" data-x=".36" data-y=".07" data-o="0"><b></b><i></i><span>The crown <em>4 signature cocktails</em></span></div>
+    <div class="tag r" data-x=".86" data-y=".36" data-o="1"><b></b><i></i><span>From the fire <em>Fokhara, grilled live</em></span></div>
+    <div class="tag r" data-x=".84" data-y=".64" data-o="2"><b></b><i></i><span>On the decks <em>A new DJ every weekend</em></span></div>
+    <div class="tag r" data-x=".66" data-y=".92" data-o="3"><b></b><i></i><span>Up to 50 guests <em>18+ only</em></span></div>
+  </div>
+
+  <a class="scroll-cue" id="cue" href="#about" aria-label="Scroll to the About section"><span aria-hidden="true"></span></a>
+  </div>
 </section>
+
+<div class="ticker" id="ticker" aria-hidden="true"><div class="track" id="track"></div></div>
 
 <section class="section about" id="about" aria-labelledby="about-title">
   <div class="wrap about-grid">
@@ -223,7 +266,8 @@
     <div class="sec-head reveal">
       <p class="eyebrow">Reservations</p>
       <h2 class="h2" id="reserve-title">Book your table or your party</h2>
-      <p class="lede">Tell us the date, the crowd and the occasion. Your request goes straight to our organizer on WhatsApp. <strong>A reservation is confirmed only after our team replies to you.</strong></p>
+      <p class="lede">Pick your night, see who is playing and how many places are left, then tell us the crowd and the occasion. Your request goes straight to our organizer on WhatsApp. <strong>A reservation is confirmed only after our team replies to you.</strong></p>
+      <div class="myreq" id="myreq" hidden aria-live="polite"></div>
     </div>
 
     <div class="reserve-grid">
@@ -242,33 +286,42 @@
             </div>
           </div>
 
-          <div class="row2">
-            <div class="field" id="f-date">
-              <label for="date">Date</label>
-              <input class="input" id="date" name="date" type="date">
-              <p class="hint" id="date-hint">We open Tuesday to Sunday from 5 PM. Up to 50 guests per night.</p>
-              <p class="err" id="e-date" role="alert"></p>
+          <div class="field" id="f-date">
+            <div class="pick-head">
+              <span class="legend" id="pick-label">Choose your night</span>
+              <span class="pick-nav">
+                <button type="button" id="pick-prev" aria-label="Show earlier nights">&#8249;</button>
+                <button type="button" id="pick-next" aria-label="Show later nights">&#8250;</button>
+              </span>
             </div>
-            <div class="field" id="f-time">
-              <label for="time">Arrival time</label>
-              <select class="input" id="time" name="time">
-                <option value="">Choose a time</option>
-              </select>
-              <p class="err" id="e-time" role="alert"></p>
+            <div class="nightpick" id="nightpick" role="group" aria-labelledby="pick-label"></div>
+            <div class="pick-other">
+              <label for="date">Or pick another date</label>
+              <input class="input date-narrow" id="date" name="date" type="date">
             </div>
+            <p class="err" id="e-date" role="alert"></p>
           </div>
 
           <div class="cap" id="cap" hidden aria-live="polite"></div>
 
-          <div class="field" id="f-guests">
-            <label for="guests">Number of guests</label>
-            <div class="stepper">
-              <button type="button" id="g-minus" aria-label="One guest fewer">&minus;</button>
-              <input class="input" id="guests" name="guests" type="number" min="1" max="50" value="4" inputmode="numeric">
-              <button type="button" id="g-plus" aria-label="One guest more">+</button>
+          <div class="row2">
+            <div class="field" id="f-time">
+              <label for="time">Arrival time</label>
+              <select class="input" id="time" name="time">
+                <option value="">Choose a night first</option>
+              </select>
+              <p class="err" id="e-time" role="alert"></p>
             </div>
-            <p class="hint">Planning a big group? Call 76 759 320 so we can prepare the space.</p>
-            <p class="err" id="e-guests" role="alert"></p>
+            <div class="field" id="f-guests">
+              <label for="guests">Number of guests</label>
+              <div class="stepper">
+                <button type="button" id="g-minus" aria-label="One guest fewer">&minus;</button>
+                <input class="input" id="guests" name="guests" type="number" min="1" value="4" inputmode="numeric">
+                <button type="button" id="g-plus" aria-label="One guest more">+</button>
+              </div>
+              <p class="hint">Big group? Call 76 759 320 so we can prepare the space.</p>
+              <p class="err" id="e-guests" role="alert"></p>
+            </div>
           </div>
 
           <fieldset class="field" id="f-occ">
@@ -323,7 +376,7 @@
         <div class="card">
           <h3>How it works</h3>
           <ol class="steps">
-            <li><div><b>Fill in the form</b><span>Date, time, guests and occasion.</span></div></li>
+            <li><div><b>Choose your night</b><span>See who is playing, the hours and the places left.</span></div></li>
             <li><div><b>Send it on WhatsApp</b><span>Your details arrive ready to send.</span></div></li>
             <li><div><b>We confirm with you</b><span>Our organizer replies to lock your table and your places.</span></div></li>
           </ol>
@@ -511,5 +564,6 @@
 <script src="js/content.js" defer></script>
 <script src="js/menu-data.js" defer></script>
 <script src="js/app.js" defer></script>
+<script src="js/fx.js" defer></script>
 </body>
 </html>

@@ -13,8 +13,6 @@ const reduce = !!(window.matchMedia && matchMedia("(prefers-reduced-motion: redu
 const parseISO = s => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
 const todayISO = () => { const d = new Date(); return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); };
 const safeUrl = u => (typeof u === "string" && /^https?:\/\//i.test(u.trim())) ? u.trim() : "";
-const bookedOn = iso => Math.max(0, Number(BOOKED[iso]) || 0);
-const placesLeft = iso => Math.max(0, CAPACITY - bookedOn(iso));
 const placesText = n => n + (n === 1 ? " place" : " places");
 /* Dates are written by hand (not Intl) so every browser prints exactly the same text */
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -67,85 +65,186 @@ $("#year").textContent = "© " + new Date().getFullYear() + " Hera The Goddess";
   }
 })();
 
-/* ---------------- events: upcoming weekends, recent nights, hero pill ---------------- */
-const nightIsUpcoming = n => { const d = parseISO(n.date); return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1, 6) > new Date(); };
-const djLine = n => (n.djs && n.djs.length) ? n.djs.map(esc).join('<span class="amp">&amp;</span>') : "";
-const plainNames = n => (n.djs && n.djs.length) ? n.djs.join(" & ") : (n.title || "");
-const posterAlt = nights => "Hera weekend lineup poster. " + nights.map(n => dLong(parseISO(n.date)) + ": " + ((n.djs && n.djs.length) ? n.djs.join(" and ") : (n.title || "see poster"))).join(". ") + ".";
+/* ---------------- nights: one engine the whole page reads ----------------
+   Every night (listed in NIGHTS or filled in from SCHEDULE) is turned into one
+   object with its type, DJs, hours, places reserved and left, and a status.
+   The lineup, the hero, the reservation picker and the form all use nightFor(). */
+const SCH = Object.assign({
+  capacity: 50, openDays: [2, 3, 4, 5, 6, 0], partyDays: [5, 6],
+  dinner: { title: "Food, cocktails & shisha", start: "17:00", end: "00:00" },
+  party: { start: "17:00", djFrom: "21:30", end: "02:00" },
+  lastCallMinutes: 60, showDays: 21, bookAheadDays: 90, dayEndsAt: "06:00"
+}, typeof SCHEDULE === "object" && SCHEDULE ? SCHEDULE : {});
+const CAPACITY = Math.max(1, Number(SCH.capacity) || 50);
+const TYPES = {
+  party: "DJ night", live: "Live performance", dinner: "Dinner night", private: "Private event", closed: "Closed"
+};
+const STATUS = {
+  open: "Available", low: "Almost full", full: "Full", late: "Last call passed",
+  private: "Private event", closed: "Closed", ended: "Ended"
+};
+const isoOf = d => d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+const addDays = (iso, n) => { const d = parseISO(iso); return isoOf(new Date(d.getFullYear(), d.getMonth(), d.getDate() + n)); };
+const toMin = s => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(s || "").trim()); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
+/* the bar's day runs past midnight: before dayEndsAt (6 AM) it is still last night */
+function serviceNow(){
+  const n = new Date();
+  let mins = n.getHours() * 60 + n.getMinutes(), iso = isoOf(n);
+  if (mins < (toMin(SCH.dayEndsAt) || 0)) { iso = isoOf(new Date(n.getFullYear(), n.getMonth(), n.getDate() - 1)); mins += 1440; }
+  return { iso, mins };
+}
+/* 1290 -> "9:30 PM", 1560 -> "2:00 AM"; short: "9:30 PM", "2 AM" */
+function clock(min, short){
+  const m = ((min % 1440) + 1440) % 1440, h24 = Math.floor(m / 60), mm = m % 60;
+  const h = h24 % 12 === 0 ? 12 : h24 % 12;
+  return h + (short && mm === 0 ? "" : ":" + pad(mm)) + (h24 >= 12 ? " PM" : " AM");
+}
+const NIGHT_BY_DATE = {};
+(typeof NIGHTS !== "undefined" && Array.isArray(NIGHTS) ? NIGHTS : []).forEach(n => {
+  if (n && typeof n.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(n.date)) NIGHT_BY_DATE[n.date] = n;
+});
+const DJ_LIST = typeof DJS === "object" && DJS ? DJS : {};
+const djOf = k => {
+  const d = DJ_LIST[k];
+  return d ? { name: String(d.name || k), photo: d.photo || "", style: d.style || "" } : { name: String(k), photo: "", style: "" };
+};
 
+function nightFor(iso, sv){
+  sv = sv || serviceNow();
+  const d = parseISO(iso), wd = d.getDay(), e = NIGHT_BY_DATE[iso] || null;
+  const openDay = (SCH.openDays || []).indexOf(wd) !== -1;
+  let type = e && TYPES[e.type] ? e.type : (!openDay ? "closed" : ((SCH.partyDays || []).indexOf(wd) !== -1 ? "party" : "dinner"));
+  const base = type === "dinner" ? SCH.dinner : SCH.party;
+  const start = toMin(e && e.start) ?? toMin(base.start) ?? 1020;
+  let end = toMin(e && e.end) ?? toMin(base.end) ?? 1440;
+  if (end <= start) end += 1440;
+  let djFrom = null;
+  if (type === "party" || type === "live") {
+    djFrom = toMin(e && e.djFrom) ?? toMin(SCH.party.djFrom);
+    if (djFrom !== null && djFrom < start) djFrom += 1440;
+    if (djFrom !== null && djFrom >= end) djFrom = null;
+  }
+  const capacity = Math.max(0, Math.round(Number(e && e.capacity) || CAPACITY));
+  const reserved = Math.min(capacity, Math.max(0, Math.round(Number(e && e.reserved) || 0)));
+  const left = capacity - reserved;
+  const lastCall = end - Math.max(0, Number(SCH.lastCallMinutes) || 0);
+
+  let status;
+  if (type === "closed") status = "closed";
+  else if (iso < sv.iso || (iso === sv.iso && sv.mins >= end)) status = "ended";
+  else if (type === "private") status = "private";
+  else if (left === 0) status = "full";
+  else if (iso === sv.iso && sv.mins >= lastCall) status = "late";
+  else status = left <= Math.max(5, Math.round(capacity * .2)) ? "low" : "open";
+
+  return {
+    iso, d, type, label: TYPES[type], listed: !!e,
+    title: (e && e.title) || (type === "dinner" ? (SCH.dinner.title || TYPES.dinner) : ""),
+    djs: (e && Array.isArray(e.djs) ? e.djs : []).map(djOf),
+    start, end, djFrom, lastCall, capacity, reserved, left,
+    minCharge: e && Number(e.minCharge) > 0 ? Number(e.minCharge) : 0,
+    note: (e && e.note) || "", poster: (e && e.poster) || "",
+    status, bookable: status === "open" || status === "low", tonight: iso === sv.iso
+  };
+}
+const isMusic = n => n.type === "party" || n.type === "live";
+const whoText = n => (n.type === "live" || n.type === "private") && n.title ? n.title :
+  (n.djs.length ? n.djs.map(x => x.name).join(" & ") : (isMusic(n) && !n.title ? "Lineup coming soon" : (n.title || n.label)));
+const hoursText = n => n.type === "closed" ? "Closed" : n.type === "private" ? "Not open to the public" :
+  (n.djFrom !== null ? "Doors " + clock(n.start) + " · Music " + clock(n.djFrom) + " – " + clock(n.end) : clock(n.start) + " – " + clock(n.end));
+const shortHours = n => n.type === "closed" || n.type === "private" ? "" : (n.djFrom !== null ? clock(n.djFrom, true) : clock(n.start, true)) + " – " + clock(n.end, true);
+const placesLine = n => n.reserved > 0 ? n.reserved + " reserved · " + n.left + " left of " + n.capacity : n.capacity + " places available";
+const pct = n => n.capacity ? Math.round(n.reserved / n.capacity * 100) : 100;
+const meter = n => '<span class="meter" aria-hidden="true"><i style="width:' + pct(n) + '%"></i></span>';
+function avatar(dj){
+  const initial = (dj.name.replace(/^dj\s+/i, "").trim().charAt(0) || "?").toUpperCase();
+  return '<span class="av">' + (safeImg(dj.photo) ? '<img src="' + esc(dj.photo) + '" alt="" loading="lazy" decoding="async">' : '<b>' + esc(initial) + '</b>') + '</span>';
+}
+const safeImg = u => typeof u === "string" && /^(assets\/|https:\/\/)[^"'<>\s]+$/i.test(u.trim());
+function djRow(n, compact){
+  if (!n.djs.length) return "";
+  if (compact) return '<div class="dj-stack" aria-hidden="true">' + n.djs.map(avatar).join("") + '</div>';
+  return '<ul class="dj-row">' + n.djs.map(dj => '<li>' + avatar(dj) + '<span><b>' + esc(dj.name) + '</b>' + (dj.style ? '<small>' + esc(dj.style) + '</small>' : '') + '</span></li>').join("") + '</ul>';
+}
+
+/* ---------------- events: weekend lineup, recent nights, hero pill ---------------- */
+const djLine = n => n.djs.length ? n.djs.map(x => esc(x.name)).join('<span class="amp">&amp;</span>') : "";
+const posterAlt = nights => "Hera lineup poster. " + nights.map(n => dLong(n.d) + ": " + whoText(n)).join(". ") + ".";
+
+function actionFor(n, cls){
+  if (n.bookable) return '<a class="btn ' + (cls || "") + '" href="#reserve" data-date="' + esc(n.iso) + '">Reserve this night</a>';
+  if (n.status === "full") return '<a class="btn btn-full" href="tel:' + PHONE_TEL + '">Full, call ' + PHONE_DISPLAY + '</a>';
+  if (n.status === "late") return '<a class="btn" href="tel:' + PHONE_TEL + '">Call to join tonight</a>';
+  if (n.status === "private") return '<a class="btn" href="tel:' + PHONE_TEL + '">Private event, call us</a>';
+  return "";
+}
 function nightCard(n, i){
-  const d = parseISO(n.date);
-  const isToday = n.date === todayISO();
-  const left = placesLeft(n.date), used = CAPACITY - left;
-  const cls = left === 0 ? " full" : (left <= 10 ? " low" : "");
-  const txt = left === 0 ? "Full" : placesText(left) + " left of " + CAPACITY;
-  const avail = '<div class="avail' + cls + '"><span>' + txt + '</span><span class="meter" aria-hidden="true"><i style="width:' + Math.round(used / CAPACITY * 100) + '%"></i></span></div>';
-  const action = left === 0
-    ? '<a class="btn btn-full" href="tel:' + PHONE_TEL + '">Full, call ' + PHONE_DISPLAY + '</a>'
-    : '<a class="btn" href="#reserve" data-date="' + esc(n.date) + '">Reserve this night</a>';
-  const hasDj = n.djs && n.djs.length;
-  const title = hasDj && n.title ? '<p class="night-title">' + esc(n.title) + '</p>' : '';
-  const label = hasDj ? "On the decks" : "Tonight at Hera";
-  const main = hasDj ? djLine(n) : esc(n.title || "");
-  const note = n.note ? '<p class="night-note">' + esc(n.note) + '</p>' : '';
+  const st = n.status;
+  const avail = n.type === "private"
+    ? '<div class="avail s-private"><span class="avail-top"><b>Private event</b><span>No online booking</span></span></div>'
+    : '<div class="avail s-' + st + '"><span class="avail-top"><b>' + esc(STATUS[st]) + '</b><span>' + esc(placesLine(n)) + '</span></span>' + meter(n) + '</div>';
+  const main = n.djs.length ? djLine(n) : esc(whoText(n));
+  const title = n.djs.length && n.title ? '<p class="night-title">' + esc(n.title) + '</p>' : '';
+  const extra = (n.minCharge ? '<p class="night-note">Minimum charge $' + n.minCharge + ' per person</p>' : '') + (n.note ? '<p class="night-note">' + esc(n.note) + '</p>' : '');
   return '<article class="night reveal"' + reveal(i) + '>' +
-    '<div class="night-date"><span class="day">' + d.getDate() + '</span>' +
-    '<span class="dm"><b>' + WEEKDAYS[d.getDay()] + (isToday ? '<span class="tonight">TONIGHT</span>' : '') + '</b><span>' + MONTHS[d.getMonth()] + '</span></span></div>' +
+    '<div class="night-date"><span class="day">' + n.d.getDate() + '</span>' +
+    '<span class="dm"><b>' + WEEKDAYS[n.d.getDay()] + (n.tonight ? '<span class="tonight">Tonight</span>' : '') + '</b><span>' + MONTHS[n.d.getMonth()] + '</span></span></div>' +
+    '<p class="night-meta"><span class="chip-type t-' + n.type + '">' + esc(n.label) + '</span><span class="night-hours">' + esc(hoursText(n)) + '</span></p>' +
     avail +
-    '<div>' + title + '<p class="label">' + label + '</p><h3>' + main + '</h3>' + note + '</div>' +
-    action + '</article>';
+    '<div>' + djRow(n, true) + title + '<p class="label">' + (n.djs.length ? "On the decks" : (n.type === "private" ? "Hera is booked" : "Tonight at Hera")) + '</p><h3>' + main + '</h3>' + extra + '</div>' +
+    actionFor(n) + '</article>';
 }
 
 (function renderEvents(){
-  const weekends = (WEEKENDS || []).filter(w => w && w.nights && w.nights.length);
-  const upcoming = [], past = [];
-  weekends.forEach(w => {
-    const nights = w.nights.slice().sort((a, b) => a.date.localeCompare(b.date));
-    const up = nights.filter(nightIsUpcoming);
-    if (up.length) upcoming.push({ poster: w.poster, nights: up, all: nights });
-    else past.push({ poster: w.poster, nights });
+  const sv = serviceNow();
+  const nights = Object.keys(NIGHT_BY_DATE).sort().map(iso => nightFor(iso, sv)).filter(n => n.type !== "dinner" && n.type !== "closed");
+  const groups = [];
+  nights.forEach(n => {
+    const key = n.poster || ("week-" + addDays(n.iso, -((n.d.getDay() + 2) % 7)));
+    let g = groups.find(x => x.key === key);
+    if (!g) { g = { key, poster: n.poster, nights: [] }; groups.push(g); }
+    g.nights.push(n);
   });
-  upcoming.sort((a, b) => a.nights[0].date.localeCompare(b.nights[0].date));
-  past.sort((a, b) => b.nights[0].date.localeCompare(a.nights[0].date));
+  const upcoming = groups.filter(g => g.nights.some(n => n.status !== "ended"))
+    .map(g => ({ poster: g.poster, all: g.nights, nights: g.nights.filter(n => n.status !== "ended") }))
+    .sort((a, b) => a.nights[0].iso.localeCompare(b.nights[0].iso));
+  const past = groups.filter(g => g.nights.every(n => n.status === "ended"))
+    .sort((a, b) => b.nights[0].iso.localeCompare(a.nights[0].iso));
 
   const box = $("#upcoming");
   if (!upcoming.length) {
     box.innerHTML = '<p class="lineup-empty reveal">This week’s lineup is coming soon. Call or WhatsApp ' + PHONE_DISPLAY + ' to ask who is playing.</p>';
   } else {
     box.innerHTML = upcoming.map(w => {
-      const poster = w.poster
-        ? '<figure class="poster reveal"><img src="' + esc(w.poster) + '" alt="' + esc(posterAlt(w.all)) + '" loading="lazy" decoding="async"></figure>'
-        : '';
-      return '<div class="weekend' + (w.poster ? ' has-poster' : '') + '">' + poster +
-        '<div class="nights">' + w.nights.map(nightCard).join("") + '</div></div>';
+      const poster = w.poster ? '<figure class="poster reveal"><img src="' + esc(w.poster) + '" alt="' + esc(posterAlt(w.all)) + '" loading="lazy" decoding="async"></figure>' : '';
+      return '<div class="weekend' + (w.poster ? ' has-poster' : '') + '">' + poster + '<div class="nights">' + w.nights.map(nightCard).join("") + '</div></div>';
     }).join("");
   }
 
-  /* recent nights (posters + names, newest first) */
   const recent = past.slice(0, 12);
   if (recent.length) {
     $("#past-grid").innerHTML = recent.map((w, i) => {
-      const first = parseISO(w.nights[0].date), last = parseISO(w.nights[w.nights.length - 1].date);
-      const head = shortRange(first, last);
-      const lines = w.nights.map(n => '<li><span>' + esc(shortDay(parseISO(n.date))) + '</span> ' + esc(plainNames(n) || "See poster") + '</li>').join("");
+      const first = w.nights[0].d, last = w.nights[w.nights.length - 1].d;
+      const lines = w.nights.map(n => '<li><span>' + esc(shortDay(n.d)) + '</span> ' + esc(whoText(n)) + '</li>').join("");
       const img = w.poster ? '<img src="' + esc(w.poster) + '" alt="' + esc(posterAlt(w.nights)) + '" loading="lazy" decoding="async">' : '';
-      return '<article class="past-card reveal"' + reveal(i % 4) + '>' +
-        (img ? '<div class="past-img">' + img + '</div>' : '') +
-        '<div class="past-cap"><b>' + esc(head) + '</b><ul>' + lines + '</ul></div></article>';
+      return '<article class="past-card reveal"' + reveal(i % 4) + '>' + (img ? '<div class="past-img">' + img + '</div>' : '') +
+        '<div class="past-cap"><b>' + esc(shortRange(first, last)) + '</b><ul>' + lines + '</ul></div></article>';
     }).join("");
     $("#past").hidden = false;
   }
 
-  $("#djlist").innerHTML = RECENT_DJS.map(n => "<li>" + esc(n) + "</li>").join("");
+  $("#djlist").innerHTML = Object.keys(DJ_LIST).map(k => "<li>" + esc(djOf(k).name) + "</li>").join("");
 
-  /* hero pill: the next night */
+  /* hero pill: tonight if Hera is open, otherwise the next DJ night */
   const pill = $("#next-night");
-  const next = upcoming.length ? upcoming[0].nights[0] : null;
+  let next = nightFor(sv.iso, sv);
+  if (next.status === "closed" || next.status === "ended") next = null;
+  if (!next) next = upcoming.length ? upcoming[0].nights[0] : null;
+  if (!next) for (let i = 1; i <= 7 && !next; i++) { const n = nightFor(addDays(sv.iso, i), sv); if (n.status !== "closed") next = n; }
   if (pill && next) {
-    const d = parseISO(next.date);
-    const who = plainNames(next);
-    pill.innerHTML = '<i aria-hidden="true"></i><span>' + (next.date === todayISO() ? "Tonight" : "Next night") + '</span><b>' +
-      esc(shortDay(d)) + '</b>' + (who ? '<em>' + esc(who) + '</em>' : '');
+    pill.innerHTML = '<i aria-hidden="true"></i><span>' + (next.tonight ? "Tonight" : "Next night") + '</span><b>' + esc(shortDay(next.d)) + '</b>' +
+      '<em>' + esc(whoText(next)) + '</em><small>' + esc(shortHours(next)) + '</small>';
+    if (next.bookable) { pill.href = "#reserve"; pill.dataset.date = next.iso; }
     pill.hidden = false;
   }
 })();
@@ -384,27 +483,156 @@ document.addEventListener("click", e => {
   const target = id ? document.getElementById(id) : document.body;
   if (!target || target.hidden) return;
   e.preventDefault();
-  if (a.dataset.date) setDate(a.dataset.date);
+  if (a.dataset.date) setDate(a.dataset.date, false);
   if (a.dataset.menuTab) selectTab($("#tab-" + a.dataset.menuTab));
   target.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
   if (history.replaceState && id) history.replaceState(null, "", "#" + id);
 });
 
-/* ---------------- booking form ---------------- */
+/* ---------------- booking form ----------------
+   1. Choose your night (picker of the coming nights, or any date)
+   2. The selected night shows its DJs, hours, places reserved and left
+   3. Arrival times follow that night's hours
+   4. The WhatsApp message carries every detail */
 const form = $("#book"), sent = $("#sent");
-const dateEl = $("#date"), timeEl = $("#time"), guestsEl = $("#guests");
-dateEl.min = todayISO();
+const dateEl = $("#date"), timeEl = $("#time"), guestsEl = $("#guests"), pickEl = $("#nightpick");
+const REQ_KEY = "hera-request";
+let selected = null;
 
-(function fillTimes(){
-  for (let m = 17 * 60; m <= 25 * 60; m += 30) {
-    const h24 = Math.floor(m / 60) % 24, mm = m % 60;
-    const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
-    const label = h12 + ":" + pad(mm) + (h24 >= 12 ? " PM" : " AM");
+function svRange(){
+  const sv = serviceNow();
+  dateEl.min = sv.iso;
+  dateEl.max = addDays(sv.iso, Math.max(1, Number(SCH.bookAheadDays) || 90));
+  return sv;
+}
+function myRequest(){
+  try { const r = JSON.parse(localStorage.getItem(REQ_KEY) || "null"); return r && r.date ? r : null; } catch (_) { return null; }
+}
+
+function pickCard(n, mine){
+  const on = selected === n.iso;
+  const left = n.bookable ? (n.reserved > 0 ? n.left + " left" : n.capacity + " places") : STATUS[n.status];
+  const who = n.type === "closed" ? "Closed" : (n.type === "private" ? "Private event" : whoText(n));
+  return '<button type="button" class="pick t-' + n.type + ' s-' + n.status + (on ? ' on' : '') + '" data-pick="' + n.iso + '" aria-pressed="' + on + '"' +
+    (n.bookable ? '' : ' aria-disabled="true"') + ' aria-label="' + esc(dLong(n.d) + ", " + n.label + ", " + who + (shortHours(n) ? ", " + shortHours(n) : "") + ", " + (n.bookable ? placesLine(n) : STATUS[n.status])) + '">' +
+    '<span class="pk-date"><small>' + (n.tonight ? "Tonight" : WKD[n.d.getDay()]) + '</small><b>' + n.d.getDate() + '</b><small>' + MON[n.d.getMonth()] + '</small></span>' +
+    '<span class="pk-type">' + esc(n.label) + '</span>' +
+    '<span class="pk-who">' + esc(who) + '</span>' +
+    (shortHours(n) ? '<span class="pk-time">' + esc(shortHours(n)) + '</span>' : '') +
+    '<span class="pk-left">' + esc(left) + '</span>' + (n.type !== "closed" ? meter(n) : '') +
+    (mine ? '<span class="pk-mine">Your request</span>' : '') + '</button>';
+}
+function renderPicker(){
+  const sv = svRange(), mine = myRequest();
+  const days = Math.max(7, Number(SCH.showDays) || 21);
+  let html = "";
+  for (let i = 0; i < days; i++) {
+    const n = nightFor(addDays(sv.iso, i), sv);
+    if (n.status === "ended") continue;
+    html += pickCard(n, mine && mine.date === n.iso);
+  }
+  pickEl.innerHTML = html;
+}
+pickEl.addEventListener("click", e => {
+  const b = e.target.closest("[data-pick]");
+  if (b) setDate(b.dataset.pick, false);
+});
+pickEl.addEventListener("keydown", e => {
+  if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+  const all = $$(".pick", pickEl), i = all.indexOf(document.activeElement);
+  if (i === -1) return;
+  e.preventDefault();
+  const nx = all[Math.min(all.length - 1, Math.max(0, i + (e.key === "ArrowRight" ? 1 : -1)))];
+  nx.focus(); nx.scrollIntoView({ block: "nearest", inline: "nearest", behavior: reduce ? "auto" : "smooth" });
+});
+$("#pick-prev").addEventListener("click", () => pickEl.scrollBy({ left: -pickEl.clientWidth * .8, behavior: reduce ? "auto" : "smooth" }));
+$("#pick-next").addEventListener("click", () => pickEl.scrollBy({ left: pickEl.clientWidth * .8, behavior: reduce ? "auto" : "smooth" }));
+
+function fillTimes(n){
+  const keep = timeEl.value;
+  timeEl.innerHTML = "";
+  const first = document.createElement("option");
+  first.value = "";
+  if (!n || !n.bookable) { first.textContent = n ? "Not open for requests" : "Choose a night first"; timeEl.appendChild(first); timeEl.disabled = true; return; }
+  first.textContent = "Choose a time"; timeEl.appendChild(first); timeEl.disabled = false;
+  const sv = serviceNow();
+  let from = n.start;
+  if (n.tonight) from = Math.max(from, Math.ceil(sv.mins / 30) * 30);
+  for (let m = from; m <= n.lastCall; m += 30) {
     const o = document.createElement("option");
-    o.value = label; o.textContent = label;
+    const when = m === 1440 ? " (midnight)" : (m > 1440 ? " (after midnight)" : "");
+    const label = clock(m) + when + (n.djFrom !== null && m === n.djFrom ? " · music starts" : "");
+    o.value = clock(m) + when;
+    o.textContent = label;
     timeEl.appendChild(o);
   }
-})();
+  if (keep && Array.from(timeEl.options).some(o => o.value === keep)) timeEl.value = keep;
+}
+
+function setDate(iso, scroll){
+  if (form.hidden) { sent.hidden = true; form.hidden = false; }
+  selected = iso || null;
+  dateEl.value = iso || "";
+  renderPicker();
+  const card = iso && pickEl.querySelector('[data-pick="' + iso + '"]');
+  if (card) card.scrollIntoView({ block: "nearest", inline: "center", behavior: reduce || scroll === false ? "auto" : "smooth" });
+  const n = iso ? nightFor(iso) : null;
+  fillTimes(n);
+  updateCap();
+  $("#e-date").textContent = ""; $("#f-date").classList.remove("bad");
+}
+dateEl.addEventListener("change", () => {
+  const v = dateEl.value;
+  if (v && (v < dateEl.min || v > dateEl.max)) { setDate(null); $("#e-date").textContent = "Choose a date between today and " + dLong(parseISO(dateEl.max)) + "."; return; }
+  setDate(v || null);
+});
+
+const maxGuests = () => { const n = selected && nightFor(selected); return n && n.bookable ? Math.max(1, n.left) : CAPACITY; };
+$("#g-minus").addEventListener("click", () => { guestsEl.value = Math.max(1, (parseInt(guestsEl.value, 10) || 1) - 1); updateCap(); });
+$("#g-plus").addEventListener("click", () => { guestsEl.value = Math.min(maxGuests(), (parseInt(guestsEl.value, 10) || 0) + 1); updateCap(); });
+guestsEl.addEventListener("input", () => updateCap());
+
+function setSubmit(n){
+  const b = $("#submit-btn");
+  const block = n && !n.bookable;
+  b.disabled = !!block;
+  b.textContent = !block ? "Send booking request" : ({ full: "This night is full", closed: "Closed that day", private: "Private event", late: "Online requests closed", ended: "This night has ended" }[n.status] || "Not available");
+}
+function updateCap(){
+  const box = $("#cap");
+  if (!selected) { box.hidden = true; box.innerHTML = ""; setSubmit(null); return; }
+  const n = nightFor(selected);
+  const guests = parseInt(guestsEl.value, 10) || 0;
+  let sub = "", actions = "";
+  const call = '<a class="btn btn-gold" href="tel:' + PHONE_TEL + '">Call ' + PHONE_DISPLAY + '</a>' +
+    '<a class="btn btn-wa" href="https://wa.me/' + WA_NUMBER + '?text=' + encodeURIComponent("Hello Hera, I would like to ask about " + dFull(n.d) + ".") + '" target="_blank" rel="noopener">WhatsApp</a>';
+  if (n.status === "closed") { sub = "Hera is closed on " + WEEKDAYS[n.d.getDay()] + "s. Choose another night."; }
+  else if (n.status === "private") { sub = "This night is booked for a private event. Call our organizer if you are a guest, or choose another night."; actions = call; }
+  else if (n.status === "full") { sub = "All " + n.capacity + " places are taken. Call our organizer to ask about a free spot or choose another night."; actions = call; }
+  else if (n.status === "late") { sub = "Online requests close " + SCH.lastCallMinutes + " minutes before the end of the night. Call us to see if we can still seat you."; actions = call; }
+  else if (n.status === "ended") { sub = "This night has ended. Choose another night."; }
+  else {
+    if (guests > n.left) sub = "Your group of " + guests + " is more than the " + placesText(n.left) + " left. Lower the number of guests, or call " + PHONE_DISPLAY + ".";
+    else if (n.status === "low") sub = "Only " + placesText(n.left) + " left. Send your request soon.";
+    if (n.minCharge) sub += (sub ? " " : "") + "Minimum charge $" + n.minCharge + " per person.";
+    if (isMusic(n) && !n.djs.length && !n.title) sub += (sub ? " " : "") + "The DJ for this night is announced on our posters.";
+  }
+  const warn = n.bookable && guests > n.left;
+  const hours = n.type === "closed" || n.type === "private" ? '' : '<dl class="cap-hours">' + (
+    '<div><dt>' + (n.djFrom !== null ? "Doors" : "Open") + '</dt><dd>' + clock(n.start) + (n.djFrom !== null ? "" : " – " + clock(n.end)) + '</dd></div>' +
+    (n.djFrom !== null ? '<div><dt>' + (n.type === "live" ? "Live" : "DJ") + '</dt><dd>' + clock(n.djFrom) + ' – ' + clock(n.end) + '</dd></div>' : '') +
+    (n.bookable ? '<div><dt>Last arrival</dt><dd>' + clock(n.lastCall) + '</dd></div>' : '')) + '</dl>';
+  const count = n.type === "closed" || n.type === "private" ? '' :
+    '<div class="cap-count"><span><b>' + n.reserved + '</b>reserved</span><span><b>' + n.left + '</b>left</span><span><b>' + n.capacity + '</b>places</span></div>' + meter(n);
+  box.className = "cap t-" + n.type + " s-" + n.status + (warn ? " warn" : "");
+  box.innerHTML = '<div class="cap-head"><span class="chip-type t-' + n.type + '">' + esc(n.label) + '</span><b class="cap-status">' + esc(STATUS[n.status]) + '</b></div>' +
+    '<p class="cap-title">' + esc(dLong(n.d)) + (n.tonight ? ' <span class="tonight">Tonight</span>' : '') + '</p>' +
+    (n.djs.length ? djRow(n) : '<p class="cap-who">' + esc(n.type === "closed" ? "Closed" : whoText(n)) + '</p>') +
+    (n.djs.length && n.title ? '<p class="cap-who">' + esc(n.title) + '</p>' : '') +
+    hours + count + (sub ? '<p class="cap-sub">' + esc(sub) + '</p>' : '') + (actions ? '<div class="cap-actions">' + actions + '</div>' : '');
+  box.hidden = false;
+  setSubmit(n);
+}
 
 (function fillOccasions(){
   const list = ["Birthday", "Bachelor / Bachelorette", "Private party", "Group dinner", "Corporate event", "Drinks & music"];
@@ -412,72 +640,12 @@ dateEl.min = todayISO();
     '<label class="opt"><input type="radio" name="occ" value="' + esc(o) + '" id="occ-' + i + '"><span>' + esc(o) + '</span></label>').join("");
 })();
 
-const maxGuests = () => (dateEl.value && dateEl.value >= todayISO()) ? Math.max(1, Math.min(CAPACITY, placesLeft(dateEl.value))) : CAPACITY;
-$("#g-minus").addEventListener("click", () => { guestsEl.value = Math.max(1, (parseInt(guestsEl.value, 10) || 1) - 1); updateCap(); });
-$("#g-plus").addEventListener("click", () => { guestsEl.value = Math.min(maxGuests(), (parseInt(guestsEl.value, 10) || 0) + 1); updateCap(); });
-guestsEl.addEventListener("input", () => updateCap());
-
-function setDate(iso){
-  if (form.hidden) { sent.hidden = true; form.hidden = false; }
-  dateEl.value = iso;
-  dateHint();
-  updateCap();
-}
-function dateHint(){
-  const hint = $("#date-hint");
-  if (!dateEl.value) { hint.textContent = "We open Tuesday to Sunday from 5 PM. Up to " + CAPACITY + " guests per night."; return; }
-  const d = parseISO(dateEl.value);
-  hint.textContent = d.getDay() === 1
-    ? "We usually open Tuesday to Sunday. Our team will tell you if we can host you on a Monday."
-    : "We open Tuesday to Sunday from 5 PM.";
-}
-dateEl.addEventListener("change", () => { dateHint(); updateCap(); });
-
-function setSubmit(full){
-  const b = $("#submit-btn");
-  b.disabled = full;
-  b.textContent = full ? "This night is full" : "Send booking request";
-}
-function updateCap(){
-  const box = $("#cap");
-  const iso = dateEl.value;
-  if (!iso || iso < todayISO()) { box.hidden = true; box.innerHTML = ""; setSubmit(false); return; }
-  const left = placesLeft(iso), used = CAPACITY - left;
-  const guests = parseInt(guestsEl.value, 10) || 0;
-  const nice = dLong(parseISO(iso));
-  let cls = "cap", title, sub, actions = "";
-  if (left === 0) {
-    cls += " full";
-    title = nice + " is full";
-    sub = "All " + CAPACITY + " places are taken. Call our organizer to ask about a free spot or another night.";
-    actions = '<div class="cap-actions"><a class="btn btn-gold" href="tel:' + PHONE_TEL + '">Call ' + PHONE_DISPLAY + '</a>' +
-      '<a class="btn btn-wa" href="https://wa.me/' + WA_NUMBER + '?text=' + encodeURIComponent("Hello Hera, I would like to ask about " + nice + ".") + '" target="_blank" rel="noopener">WhatsApp</a></div>';
-  } else {
-    if (left <= 10) cls += " low";
-    title = placesText(left) + " left on " + nice;
-    sub = used + " of " + CAPACITY + " places are booked.";
-    if (guests > left) {
-      cls += " warn";
-      sub = "Your group of " + guests + " is more than the " + placesText(left) + " left. Lower the number of guests, or call our organizer on " + PHONE_DISPLAY + ".";
-    }
-  }
-  box.className = cls;
-  box.innerHTML = '<p class="cap-title">' + esc(title) + '</p><span class="meter" aria-hidden="true"><i style="width:' + Math.round(used / CAPACITY * 100) + '%"></i></span><p class="cap-sub">' + esc(sub) + '</p>' + actions;
-  box.hidden = false;
-  setSubmit(left === 0);
-}
-
 function read(){
   const occ = form.querySelector('input[name="occ"]:checked');
   return {
-    name: $("#name").value.trim(),
-    phone: $("#phone").value.trim(),
-    date: dateEl.value,
-    time: timeEl.value,
-    guests: parseInt(guestsEl.value, 10),
-    occ: occ ? occ.value : "",
-    notes: $("#notes").value.trim(),
-    age: $("#age").checked
+    name: $("#name").value.trim(), phone: $("#phone").value.trim(), date: selected || "",
+    time: timeEl.value, guests: parseInt(guestsEl.value, 10), occ: occ ? occ.value : "",
+    notes: $("#notes").value.trim(), age: $("#age").checked
   };
 }
 function validate(v){
@@ -485,17 +653,23 @@ function validate(v){
   if (v.name.length < 2) e.name = "Enter your name.";
   const digits = v.phone.replace(/\D/g, "");
   if (digits.length < 7 || digits.length > 15) e.phone = "Enter a phone number we can reach you on.";
-  if (!v.date) e.date = "Choose a date.";
-  else if (v.date < todayISO()) e.date = "Choose today or a later date.";
-  else if (placesLeft(v.date) === 0) e.date = "That night is full. Pick another date or call " + PHONE_DISPLAY + ".";
-  if (!v.time) e.time = "Choose your arrival time.";
-  if (!(v.guests >= 1 && v.guests <= CAPACITY)) e.guests = "Enter a number of guests from 1 to " + CAPACITY + ". For a bigger group, call " + PHONE_DISPLAY + ".";
-  else if (v.date && v.date >= todayISO() && v.guests > placesLeft(v.date)) e.guests = "Only " + placesText(placesLeft(v.date)) + " left on that night. Lower the number of guests or call " + PHONE_DISPLAY + ".";
+  const n = v.date ? nightFor(v.date) : null;
+  if (!n) e.date = "Choose the night you want to come.";
+  else if (!n.bookable) e.date = ({
+    closed: "Hera is closed that day. Choose another night.",
+    private: "That night is a private event. Choose another night or call " + PHONE_DISPLAY + ".",
+    full: "That night is full. Choose another night or call " + PHONE_DISPLAY + ".",
+    late: "Online requests for tonight are closed. Call " + PHONE_DISPLAY + ".",
+    ended: "That night has ended. Choose another night."
+  })[n.status];
+  if (!v.time) e.time = n && n.bookable ? "Choose your arrival time." : "Choose a night first.";
+  if (!(v.guests >= 1)) e.guests = "Enter the number of guests.";
+  else if (n && n.bookable && v.guests > n.left) e.guests = "Only " + placesText(n.left) + " left that night. Lower the number of guests or call " + PHONE_DISPLAY + ".";
   if (!v.occ) e.occ = "Choose an occasion.";
   if (!v.age) e.age = "Please confirm that everyone in your group is 18 or older.";
   return e;
 }
-const fieldIds = { name: "name", phone: "phone", date: "date", time: "time", guests: "guests", occ: "occ-0", age: "age" };
+const fieldIds = { name: "name", phone: "phone", date: "nightpick", time: "time", guests: "guests", occ: "occ-0", age: "age" };
 function showErrors(errs){
   Object.keys(fieldIds).forEach(k => {
     const box = $("#e-" + k), wrap = $("#f-" + k);
@@ -507,18 +681,21 @@ function showErrors(errs){
   sum.hidden = !n;
 }
 function buildMessage(v){
+  const n = nightFor(v.date);
   const lines = [
     "Hello Hera, I would like to make a reservation.",
     "",
-    "Name: " + v.name,
-    "Phone: " + v.phone,
-    "Date: " + dFull(parseISO(v.date)),
+    "Night: " + dFull(n.d) + " (" + n.label + (n.title && n.type !== "dinner" ? ": " + n.title : "") + (n.djs.length ? " with " + n.djs.map(x => x.name).join(" & ") : "") + ")",
+    "Hours: " + hoursText(n),
     "Arrival: " + v.time,
     "Guests: " + v.guests,
-    "Occasion: " + v.occ
+    "Occasion: " + v.occ,
+    "Name: " + v.name,
+    "Phone: " + v.phone
   ];
   if (v.notes) lines.push("Notes: " + v.notes);
-  lines.push("", "Everyone in my group is 18+.");
+  if (n.minCharge) lines.push("Minimum charge: $" + n.minCharge + " per person (noted)");
+  lines.push("", "Places left when I sent this: " + n.left + " of " + n.capacity, "Everyone in my group is 18+.");
   return lines.join("\n");
 }
 form.addEventListener("submit", e => {
@@ -527,18 +704,39 @@ form.addEventListener("submit", e => {
   const errs = validate(v);
   showErrors(errs);
   const first = Object.keys(errs)[0];
-  if (first) { const el = $("#" + fieldIds[first]); if (el) el.focus(); return; }
+  if (first) {
+    const el = first === "date" ? (pickEl.querySelector(".pick.on") || pickEl.querySelector(".pick")) : $("#" + fieldIds[first]);
+    if (el) el.focus();
+    return;
+  }
   const msg = buildMessage(v);
   const url = "https://wa.me/" + WA_NUMBER + "?text=" + encodeURIComponent(msg);
+  try { localStorage.setItem(REQ_KEY, JSON.stringify({ date: v.date, guests: v.guests, time: v.time, url })); } catch (_) {}
   $("#msg").value = msg;
   $("#wa-link").href = url;
   $("#copied").textContent = "";
   form.hidden = true;
   sent.hidden = false;
+  renderPicker(); showMyRequest();
   sent.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "center" });
   try { window.open(url, "_blank", "noopener"); } catch (_) {}
 });
 $("#edit").addEventListener("click", () => { sent.hidden = true; form.hidden = false; $("#name").focus(); });
+
+/* the guest's own request, remembered on this phone until the night has passed */
+function showMyRequest(){
+  const box = $("#myreq"), r = myRequest();
+  if (!box) return;
+  const n = r ? nightFor(r.date) : null;
+  if (!r || !n || n.status === "ended") { if (r) try { localStorage.removeItem(REQ_KEY); } catch (_) {} box.hidden = true; return; }
+  box.innerHTML = '<span class="dot" aria-hidden="true"></span><p><b>Your request: ' + esc(dLong(n.d)) + ', ' + esc(String(r.guests)) + (r.guests == 1 ? ' guest' : ' guests') + (r.time ? ', ' + esc(r.time) : '') + '.</b> ' +
+    'Waiting for our team to confirm on WhatsApp.</p>' +
+    (safeUrl(r.url) ? '<a class="link" href="' + esc(r.url) + '" target="_blank" rel="noopener">Send it again</a>' : '') +
+    '<button type="button" class="link" id="myreq-clear">Hide</button>';
+  box.hidden = false;
+  $("#myreq-clear").addEventListener("click", () => { try { localStorage.removeItem(REQ_KEY); } catch (_) {} box.hidden = true; renderPicker(); });
+}
+
 async function copyFrom(taId, outId){
   const out = $("#" + outId), ta = $("#" + taId);
   try {
@@ -550,6 +748,10 @@ async function copyFrom(taId, outId){
   }
 }
 $("#copy").addEventListener("click", () => copyFrom("msg", "copied"));
+
+renderPicker(); fillTimes(null); showMyRequest();
+/* keep "tonight" and the places right if the page stays open past midnight */
+setInterval(() => { renderPicker(); if (selected) { fillTimes(nightFor(selected)); updateCap(); } }, 5 * 60 * 1000);
 
 /* ---------------- feedback and notes ---------------- */
 const fb = $("#fb"), fbSent = $("#fb-sent");
@@ -667,45 +869,7 @@ fb.addEventListener("submit", e => {
 $("#fb-edit").addEventListener("click", () => { fbSent.hidden = true; fb.hidden = false; $("#fb-msg").focus(); });
 $("#fb-copy").addEventListener("click", () => copyFrom("fb-out", "fb-copied"));
 
-/* ---------------- hero embers ---------------- */
-(function embers(){
-  const c = $("#embers");
-  if (!c || !c.getContext || reduce) return;
-  const ctx = c.getContext("2d");
-  let w = 0, h = 0, parts = [], raf = 0;
-  const hidden = () => c.offsetParent === null || getComputedStyle(c).display === "none";
-  function size(){
-    const r = c.parentElement.getBoundingClientRect();
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    w = r.width; h = r.height;
-    c.width = Math.round(w * dpr); c.height = Math.round(h * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const count = Math.min(70, Math.round(w * h / 16000));
-    parts = Array.from({ length: count }, () => ({
-      x: Math.random() * w, y: Math.random() * h,
-      r: Math.random() * 1.5 + .5, vy: Math.random() * .28 + .07,
-      a: Math.random() * 6.28, s: Math.random() * .02 + .006
-    }));
-  }
-  function frame(){
-    ctx.clearRect(0, 0, w, h);
-    parts.forEach(p => {
-      p.y -= p.vy; p.a += p.s; p.x += Math.sin(p.a) * .16;
-      if (p.y < -6) { p.y = h + 6; p.x = Math.random() * w; }
-      const al = .22 + .5 * Math.abs(Math.sin(p.a * 2));
-      ctx.fillStyle = "rgba(226,190,120," + (al * .16).toFixed(3) + ")";
-      ctx.beginPath(); ctx.arc(p.x, p.y, p.r * 4, 0, 6.283); ctx.fill();
-      ctx.fillStyle = "rgba(244,214,150," + al.toFixed(3) + ")";
-      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 6.283); ctx.fill();
-    });
-    raf = requestAnimationFrame(frame);
-  }
-  function start(){ cancelAnimationFrame(raf); if (!hidden() && !document.hidden) { size(); frame(); } }
-  start();
-  let t;
-  window.addEventListener("resize", () => { clearTimeout(t); t = setTimeout(start, 150); });
-  document.addEventListener("visibilitychange", () => { if (document.hidden) cancelAnimationFrame(raf); else start(); });
-})();
+/* hero embers live in js/fx.js (they pause when the hero is off-screen) */
 
 /* ---------------- reveal on scroll ---------------- */
 (function revealOnScroll(){
